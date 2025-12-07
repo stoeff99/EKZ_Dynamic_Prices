@@ -1,4 +1,3 @@
-
 <?php
 // Temporary debugging
 error_reporting(E_ALL); ini_set('display_errors', 1);
@@ -18,20 +17,21 @@ $cfgfile = LBPDATADIR . '/ekz_config.json';
 
 // Load current config or defaults
 $defaults = [
-  'realm'  => 'myEKZ',
-  'auth_server_base'  => 'https://login-test.ekz.ch/auth',
-  'client_id'         => 'ems-bowles',
-  'client_secret'     => '',
+  'auth_server_base'   => 'https://login-test.ekz.ch/auth',
+  'realm'              => 'myEKZ', // NEW
+  'client_id'          => 'ems-bowles',
+  'client_secret'      => '',
   // Default redirect to this plugin's callback.php (you can override in the UI)
-  'redirect_uri'      => 'http://' . $_SERVER['HTTP_HOST'] . '/plugins/' . basename(LBPPLUGINDIR) . '/callback.php',
-  'api_base'          => 'https://test-api.tariffs.ekz.ch/v1',
-  'ems_instance_id'   => 'ems-bowles',
-  'scope'             => 'openid',
-  'timezone'          => 'Europe/Zurich',
-  'mqtt_enabled'      => true,
-  'mqtt_topic_raw'    => 'ekz/tariffs/raw',
-  'mqtt_topic_summary'=> 'ekz/tariffs/summary',
-  'cron_enabled'      => true
+  'redirect_uri'       => 'http://' . $_SERVER['HTTP_HOST'] . '/plugins/' . basename(LBPPLUGINDIR) . '/callback.php',
+  'api_base'           => 'https://test-api.tariffs.ekz.ch/v1',
+  'ems_instance_id'    => 'ems-bowles',
+  'scope'              => 'openid',
+  'response_mode'      => 'query', // NEW (fixes "Missing setting: response_mode")
+  'timezone'           => 'Europe/Zurich',
+  'mqtt_enabled'       => true,
+  'mqtt_topic_raw'     => 'ekz/tariffs/raw',
+  'mqtt_topic_summary' => 'ekz/tariffs/summary',
+  'cron_enabled'       => true
 ];
 
 if (file_exists($cfgfile)) {
@@ -45,8 +45,8 @@ if (file_exists($cfgfile)) {
 // Save if POSTed
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $fields = [
-    'auth_server_base','client_id','client_secret','redirect_uri',
-    'api_base','ems_instance_id','scope','timezone',
+    'auth_server_base','realm','client_id','client_secret','redirect_uri',
+    'api_base','ems_instance_id','scope','response_mode','timezone',
     'mqtt_topic_raw','mqtt_topic_summary'
   ];
   foreach ($fields as $f) {
@@ -57,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   // Write config JSON (LBPDATADIR)
   @mkdir(dirname($cfgfile), 0775, true);
-  file_put_contents($cfgfile, json_encode($cfg, JSON_PRETTY_PRINT));
+  file_put_contents($cfgfile, json_encode($cfg, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE));
 
   // Cron registration
   $pluginfolder = basename(LBPPLUGINDIR);
@@ -85,12 +85,14 @@ LBWeb::lbheader($template_title, $helplink, $helptemplate);
   <div data-role="collapsible" data-collapsed="false">
     <h3>EKZ Connection</h3>
     <label>Auth server base<br><input name="auth_server_base" size="60" value="<?=val($cfg,'auth_server_base')?>"></label><br>
+    <label>Realm<br><input name="realm" value="<?=val($cfg,'realm','myEKZ')?>"></label><br>
     <label>Client ID<br><input name="client_id" value="<?=val($cfg,'client_id')?>"></label><br>
     <label>Client secret<br><input type="password" name="client_secret" value="<?=val($cfg,'client_secret')?>"></label><br>
     <label>Redirect URI<br><input name="redirect_uri" size="60" value="<?=val($cfg,'redirect_uri')?>"></label><br>
     <label>API base<br><input name="api_base" size="60" value="<?=val($cfg,'api_base')?>"></label><br>
     <label>EMS instance ID<br><input name="ems_instance_id" value="<?=val($cfg,'ems_instance_id')?>"></label><br>
     <label>Scope<br><input name="scope" value="<?=val($cfg,'scope','openid')?>"></label><br>
+    <label>Response mode<br><input name="response_mode" value="<?=val($cfg,'response_mode','query')?>"></label><br>
     <label>Timezone<br><input name="timezone" value="<?=val($cfg,'timezone','Europe/Zurich')?>"></label>
   </div>
 
@@ -102,5 +104,6 @@ LBWeb::lbheader($template_title, $helplink, $helptemplate);
   </div>
 
   <button class="ui-btn ui-btn-inline" type="submit">Save</button>
+  index.phpBack</a>
 </form>
 <?php LBWeb::lbfooter(); LOGEND('Settings rendered'); ?>
