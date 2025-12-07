@@ -1,0 +1,14 @@
+{
+  "auth_server_base": "https://login-test.ekz.ch/auth",
+  "client_id": "ems-bowles",
+  "client_secret": "ABVC",
+  "redirect_uri": "https://ems.bowles.ch",
+  "api_base": "https://test-api.tariffs.ekz.ch/v1",
+  "ems_instance_id": "ems-bowles",
+  "scope": "openid",
+  "timezone": "Europe/Zurich",
+  "mqtt_enabled": true,
+  "mqtt_topic_raw": "ekz/tariffs/raw",
+  "mqtt_topic_summary": "ekz/tariffs/summary",
+  "cron_enabled": true
+}
