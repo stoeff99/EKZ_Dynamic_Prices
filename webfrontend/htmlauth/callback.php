@@ -1,13 +1,14 @@
+
 <?php
-// Minimal OIDC callback for EKZ Dynamic Price plugin
+// callback.php — EKZ OIDC token exchange and token persistence
+// Works with response_mode=query (GET) and response_mode=form_post (POST)
+
 error_reporting(E_ALL); ini_set('display_errors', 1);
 
 require_once 'loxberry_web.php';
 require_once 'loxberry_system.php';
 
-session_start();
-
-// Load config
+// --- Load config from LBPDATADIR/ekz_config.json (JSON or key/value) ---
 $cfgpath = LBPDATADIR . '/ekz_config.json';
 if (!file_exists($cfgpath)) {
     LBWeb::lbheader("EKZ Dynamic Price", "", "");
@@ -15,7 +16,6 @@ if (!file_exists($cfgpath)) {
     LBWeb::lbfooter();
     exit;
 }
-
 $raw = trim(file_get_contents($cfgpath));
 if (strlen($raw) && $raw[0] === '{') {
     $cfg = json_decode($raw, true);
@@ -27,18 +27,26 @@ if (strlen($raw) && $raw[0] === '{') {
         $cfg[$tokens[$i]] = $tokens[$i+1];
     }
 }
+// sanity defaults
+$cfg += [
+    'realm'         => 'myEKZ',
+    'response_mode' => 'query',
+    'scope'         => 'openid'
+];
 
-$err   = $_GET['error'] ?? null;
-$state = $_GET['state'] ?? null;
-$code  = $_GET['code']  ?? null;
+// --- Read OIDC response (GET or POST) ---
+session_start();
+$error = $_REQUEST['error'] ?? null;
+$state = $_REQUEST['state'] ?? null;
+$code  = $_REQUEST['code']  ?? null;
 
-if ($err) {
+if ($error) {
     LBWeb::lbheader("EKZ Dynamic Price", "", "");
-    echo "<p><strong>OIDC Error:</strong> " . htmlspecialchars($err) . "</p>";
+    echo "<p><strong>OIDC Error:</strong> " . htmlspecialchars($error) . "</p>";
+    echo "<p><adex.phpBack</a></p>";
     LBWeb::lbfooter();
     exit;
 }
-
 if (!isset($_SESSION['state']) || $state !== $_SESSION['state']) {
     LBWeb::lbheader("EKZ Dynamic Price", "", "");
     echo "<p><strong>State mismatch</strong>. Please try start.phpSign in</a> again.</p>";
@@ -52,58 +60,63 @@ if (!$code) {
     exit;
 }
 
-// Token endpoint — exchange the authorization code
-$token_endpoint = rtrim($cfg['auth_server_base'], '/') . "/realms/" . $cfg['realm'] . "/protocol/openid-connect/token";
-$postdata = [
-    'grant_type'   => 'authorization_code',
-    'client_id'    => $cfg['client_id'],
-    'client_secret'=> $cfg['client_secret'] ?? '',
-    'code'         => $code,
-    'redirect_uri' => $cfg['redirect_uri'],
-];
+// --- Exchange authorization code for tokens at Keycloak ---
+try {
+    $token_endpoint = rtrim($cfg['auth_server_base'] ?? '', '/') .
+                      "/realms/" . ($cfg['realm'] ?? 'myEKZ') .
+                      "/protocol/openid-connect/token";
 
-$ch = curl_init($token_endpoint);
-curl_setopt_array($ch, [
-    CURLOPT_POST           => true,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_POSTFIELDS     => $postdata,
-    CURLOPT_TIMEOUT        => 30
-]);
-$resp = curl_exec($ch);
-if ($resp === false) {
-    $err = curl_error($ch); curl_close($ch);
+    $data = [
+        'grant_type'    => 'authorization_code',
+        'client_id'     => $cfg['client_id'] ?? '',
+        'client_secret' => $cfg['client_secret'] ?? '',
+        'code'          => $code,
+        // MUST match the one used in the /auth request (EKZ requires exact match)
+        'redirect_uri'  => $cfg['redirect_uri'] ?? '',
+    ];
+
+    $ch = curl_init($token_endpoint);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POSTFIELDS     => $data,
+        CURLOPT_TIMEOUT        => 30
+    ]);
+    $resp = curl_exec($ch);
+    if ($resp === false) {
+        $err = curl_error($ch); curl_close($ch);
+        throw new RuntimeException("Token exchange failed: $err");
+    }
+    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($status < 200 || $status >= 300) {
+        throw new RuntimeException("Token HTTP $status: $resp");
+    }
+
+    $tok = json_decode($resp, true);
+    if (empty($tok['access_token'])) {
+        throw new RuntimeException("No access_token in token response");
+    }
+
+    // --- Persist tokens for cron and UI ---
+    @mkdir(LBPDATADIR, 0775, true);
+    $persist = [
+        'access_token'  => $tok['access_token'],
+        'refresh_token' => $tok['refresh_token'] ?? '',
+        'expires_at'    => time() + (int)($tok['expires_in'] ?? 300),
+    ];
+    file_put_contents(LBPDATADIR . '/tokens.json', json_encode($persist, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE));
+
+    // Optional: write a one-line server log for quick verification
+    error_log('[EKZ] tokens.json written: keys=' . implode(',', array_keys($persist)));
+
+    // --- Redirect user back to the admin UI (the one you know works) ---
+    header("Location: /admin/plugins/ekz_dynamic_price_php/index.php");
+    exit;
+
+} catch (Throwable $e) {
     LBWeb::lbheader("EKZ Dynamic Price", "", "");
-    echo "<p><strong>Token exchange failed:</strong> " . htmlspecialchars($err) . "</p>";
-    LBWeb::lbfooter(); exit;
+    echo "<p><strong>Token exchange error:</strong> " . htmlspecialchars($e->getMessage()) . "</p>";
+    echo "<p><a class='ui-btn ui-btn-inline' href='index();
+    exit;
 }
-$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-if ($status < 200 || $status >= 300) {
-    LBWeb::lbheader("EKZ Dynamic Price", "", "");
-    echo "<p><strong>Token HTTP $status:</strong> " . htmlspecialchars($resp) . "</p>";
-    LBWeb::lbfooter(); exit;
-}
-
-$tok = json_decode($resp, true);
-if (empty($tok['access_token'])) {
-    LBWeb::lbheader("EKZ Dynamic Price", "", "");
-    echo "<p><strong>No access_token</strong> found in response.</p>";
-    LBWeb::lbfooter(); exit;
-}
-
-// Persist tokens for cron runs and UI
-$datadir = LBPDATADIR;
-@mkdir($datadir, 0775, true);
-file_put_contents($datadir . '/tokens.json', json_encode([
-    'access_token'  => $tok['access_token'],
-    'refresh_token' => $tok['refresh_token'] ?? '',
-    'expires_at'    => time() + (int)($tok['expires_in'] ?? 300)
-], JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE));
-
-LBWeb::lbheader("EKZ Dynamic Price", "", "");
-echo "<p><strong>Signed in successfully.</strong> Tokens stored.</p>";
-echo "<p>index.phpBack</a></p>";
-LBWeb::lbfooter();
-
-header("Location: /admin/plugins/ekz_dynamic_price_php/index.php"); exit;
-
