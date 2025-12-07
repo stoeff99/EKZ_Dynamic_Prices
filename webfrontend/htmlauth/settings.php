@@ -18,6 +18,7 @@ $cfgfile = LBPDATADIR . '/ekz_config.json';
 
 // Load current config or defaults
 $defaults = [
+  'realm'  => 'myEKZ',
   'auth_server_base'  => 'https://login-test.ekz.ch/auth',
   'client_id'         => 'ems-bowles',
   'client_secret'     => '',
