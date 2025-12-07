@@ -1,3 +1,4 @@
+
 <?php
 // Temporary debugging
 error_reporting(E_ALL); ini_set('display_errors', 1);
@@ -12,23 +13,24 @@ $helptemplate = 'help.html';
 $log = LBLog::newLog(['name'=>'settings.php']);
 LOGSTART('Settings opened');
 
-// Direct JSON I/O (no LBJSON dependency)
-$cfgfile = LBPCONFIGDIR . '/ekz_config.json';
+// Save/read the config in LBPDATADIR so OIDC pages find it
+$cfgfile = LBPDATADIR . '/ekz_config.json';
 
 // Load current config or defaults
 $defaults = [
-  'auth_server_base' => 'https://login-test.ekz.ch/auth',
-  'client_id'        => 'ems-bowles',
-  'client_secret'    => '',
-  'redirect_uri'     => 'https://ems.bowles.ch',
-  'api_base'         => 'https://test-api.tariffs.ekz.ch/v1',
-  'ems_instance_id'  => 'ems-bowles',
-  'scope'            => 'openid',
-  'timezone'         => 'Europe/Zurich',
-  'mqtt_enabled'     => true,
-  'mqtt_topic_raw'   => 'ekz/tariffs/raw',
+  'auth_server_base'  => 'https://login-test.ekz.ch/auth',
+  'client_id'         => 'ems-bowles',
+  'client_secret'     => '',
+  // Default redirect to this plugin's callback.php (you can override in the UI)
+  'redirect_uri'      => 'http://' . $_SERVER['HTTP_HOST'] . '/plugins/' . basename(LBPPLUGINDIR) . '/callback.php',
+  'api_base'          => 'https://test-api.tariffs.ekz.ch/v1',
+  'ems_instance_id'   => 'ems-bowles',
+  'scope'             => 'openid',
+  'timezone'          => 'Europe/Zurich',
+  'mqtt_enabled'      => true,
+  'mqtt_topic_raw'    => 'ekz/tariffs/raw',
   'mqtt_topic_summary'=> 'ekz/tariffs/summary',
-  'cron_enabled'     => true
+  'cron_enabled'      => true
 ];
 
 if (file_exists($cfgfile)) {
@@ -52,14 +54,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $cfg['mqtt_enabled'] = isset($_POST['mqtt_enabled']) ? true : false;
   $cfg['cron_enabled'] = true; // always enable 18:05 daily
 
-  // Write config JSON
+  // Write config JSON (LBPDATADIR)
   @mkdir(dirname($cfgfile), 0775, true);
   file_put_contents($cfgfile, json_encode($cfg, JSON_PRETTY_PRINT));
 
-  // Write cron line
+  // Cron registration
   $pluginfolder = basename(LBPPLUGINDIR);
   $cronfile = '/etc/cron.d/ekz_dynamic_price_php';
-  $line = "5 18 * * * root curl -s -X POST http://127.0.0.1/plugins/" . $pluginfolder . "/process.php -d 'action=fetch_rolling' >/dev/null 2>&1\n";
+
+  // Option A: run the PHP rolling publisher directly (recommended)
+  $line = "5 18 * * * root /usr/bin/php /opt/loxberry/webfrontend/htmlauth/plugins/${pluginfolder}/run_rolling_fetch.php >/dev/null 2>&1\n";
+
+  // Option B: keep your existing POST workflow (uncomment to use B, comment Option A)
+  // $line = "5 18 * * * root curl -s -X POST http://127.0.0.1/plugins/${pluginfolder}/process.php -d 'action=fetch_rolling' >/dev/null 2>&1\n";
+
   @file_put_contents($cronfile, $line);
   @system('systemctl restart cron');
 }
