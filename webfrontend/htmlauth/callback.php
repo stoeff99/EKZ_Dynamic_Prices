@@ -104,3 +104,6 @@ LBWeb::lbheader("EKZ Dynamic Price", "", "");
 echo "<p><strong>Signed in successfully.</strong> Tokens stored.</p>";
 echo "<p>index.phpBack</a></p>";
 LBWeb::lbfooter();
+
+header("Location: /admin/plugins/ekz_dynamic_price_php/index.php"); exit;
+
