@@ -40,7 +40,7 @@ LBWeb::lbheader($template_title, $helplink, $helptemplate);
 
 <div class="ui-grid-a" style="margin:0 0 1em 0">
   <div class="ui-block-a"><a class="ui-btn ui-btn-inline ui-corner-all ui-shadow" href="settings.php">Settings</a></div>
-  <div class="ui-block-b"><a class="ui-btn ui-btn-inline ui-corner-all ui-shadow" href="auth.php">Sign in (OIDC)</a></div>
+  <div class="ui-block-b"><a class="ui-btn ui-btn-inline ui-corner-all ui-shadow" href="start.php">Sign in (OIDC)</a></div>
 </div>
 <div><a class="ui-btn ui-btn-inline ui-corner-all ui-shadow" href="preview.php">Preview</a></div>
 
